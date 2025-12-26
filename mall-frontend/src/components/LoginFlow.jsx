@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-// const API = 'http://localhost/kigali-mall/api/main.php';
 const API = 'http://localhost/shopping-mall-system/kigali-mall/api/main.php';
 
 export const LoginForm = ({ onNext }) => {
