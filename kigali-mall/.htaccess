@@ -1,0 +1,22 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Allow the /api folder to work normally
+  RewriteCond %{REQUEST_URI} ^/kigali-mall/api/.*
+  RewriteRule ^(.*)$ - [L]
+
+  # Redirect everything else to index.html so React can handle it
+  RewriteBase /kigali-mall/
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /kigali-mall/index.html [L]
+</IfModule>
+
+# Enable CORS for API (if mod_headers is enabled)
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "*"
+  Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+  Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+</IfModule>
+

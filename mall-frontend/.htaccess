@@ -1,0 +1,14 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # 1. Allow the /api folder to work normally
+  RewriteCond %{REQUEST_URI} ^/api/.*
+  RewriteRule ^(.*)$ - [L]
+
+  # 2. Redirect everything else to index.html so React can handle it
+  RewriteBase /kigali-mall/
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /kigali-mall/index.html [L]
+</IfModule>
