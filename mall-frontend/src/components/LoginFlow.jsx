@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
-const API = 'http://localhost/kigali-mall/api/main.php';
+// const API = 'http://localhost/kigali-mall/api/main.php';
+const API = 'http://localhost/shopping-mall-system/kigali-mall/api/main.php';
 
 export const LoginForm = ({ onNext }) => {
   const [username, setUsername] = useState('');
@@ -40,7 +41,7 @@ export const LoginForm = ({ onNext }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 px-4">
+    <div className="flex items-center justify-center min-h-screen bg-linear-to-br  from-slate-900 via-blue-900 to-slate-900 px-4">
       <form onSubmit={handleSubmit} className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-blue-600">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-slate-800 mb-2">KIGALI MALL</h1>
@@ -154,7 +155,7 @@ export const OTPVerify = ({ username, onVerify, onBack }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 px-4">
+    <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-slate-900 via-blue-900 to-slate-900 px-4">
       <div className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-emerald-500">
         <div className="text-center mb-8">
           <h2 className="text-2xl font-black text-slate-800 mb-2">Security Verification</h2>
