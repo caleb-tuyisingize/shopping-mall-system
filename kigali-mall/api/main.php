@@ -52,9 +52,22 @@ if ($action === 'login') {
 if ($action === 'verify_otp') {
     $username = $data['username'] ?? '';
     $otp = $data['otp'] ?? '';
-    
-    $stmt = $pdo->prepare("SELECT user_id, role, full_name FROM users WHERE username = ? AND otp_code = ? AND otp_expiry > NOW()");
-    $stmt->execute([$username, $otp]);
+   $stmt = $pdo->prepare("
+    SELECT user_id, role, full_name, otp_expiry
+    FROM users
+    WHERE username = ? AND otp_code = ?
+");
+$stmt->execute([$username, $otp]);
+$user = $stmt->fetch();
+
+if ($user && strtotime($user['otp_expiry']) > time()) {
+    // success
+} else {
+    http_response_code(401);
+    echo json_encode(["error" => "OTP expired or invalid"]);
+}
+
+$stmt->execute([$username, $otp]);
     $user = $stmt->fetch();
     
     if ($user) {

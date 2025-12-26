@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const API = 'http://localhost/kigali-mall/api/main.php';
+const API = 'http://localhost/shopping-mall-system/kigali-mall/api/main.php';
 
 export const exportInventoryPDF = async (items) => {
   try {

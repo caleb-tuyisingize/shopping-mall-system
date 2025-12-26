@@ -5,7 +5,7 @@ import Dashboard from './components/Dashboard';
 import StockManagement from './components/StockManagement';
 import { exportInventoryPDF } from './components/ReportExport';
 
-const API = 'http://localhost/kigali-mall/api/main.php';
+const API = 'http://localhost/shopping-mall-system/kigali-mall/api/main.php';
 
 export default function App() {
   const [step, setStep] = useState('login'); // login, otp, dashboard
