@@ -6,17 +6,16 @@ export default function StockManagement({ view, userId, onExportPDF }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]); // <--- NEW STATE
   
-  // History state for the main History tab
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   
-  // --- NEW: MODAL STATES ---
+  // MODAL STATES
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [showListModal, setShowListModal] = useState(false); // Controls the "View List" popup
-  const [listModalData, setListModalData] = useState([]);    // Holds data for the popup
-  const [listModalType, setListModalType] = useState('');    // 'in', 'out', or 'items'
-  // -------------------------
+  const [showListModal, setShowListModal] = useState(false); 
+  const [listModalData, setListModalData] = useState([]);    
+  const [listModalType, setListModalType] = useState('');    
 
   const [categoryForm, setCategoryForm] = useState({
     category_name: '',
@@ -37,7 +36,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     reorder_level: '10',
     supplier_name: '',
     contact_info: '',
-    phone: ''
+    phone: '',
+    payment_method_id: '' // <--- NEW FIELD
   });
 
   useEffect(() => {
@@ -61,14 +61,17 @@ export default function StockManagement({ view, userId, onExportPDF }) {
           return dateB - dateA;
         }));
       } else {
-        // Standard load for other views
-        const [itemsRes, categoriesRes, suppliersRes] = await Promise.all([
+        // Fetch standard data + payment methods
+        const [itemsRes, categoriesRes, suppliersRes, paymentsRes] = await Promise.all([
           fetch(`${API}?action=get_items`),
           fetch(`${API}?action=get_categories`),
-          fetch(`${API}?action=get_suppliers`)
+          fetch(`${API}?action=get_suppliers`),
+          fetch(`${API}?action=get_payment_methods`) // <--- FETCH PAYMENTS
         ]);
         setItems(await itemsRes.json());
         setCategories(await categoriesRes.json());
+        setPaymentMethods(await paymentsRes.json()); // <--- SET STATE
+        
         if (view === 'stock-in' || view === 'suppliers') {
           setSuppliers(await suppliersRes.json());
         }
@@ -81,11 +84,10 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     }
   };
 
-  // --- FUNCTION TO OPEN LIST MODAL ---
   const openListModal = async (type) => {
     setListModalType(type);
     setShowListModal(true);
-    setListModalData([]); // Clear previous data while loading
+    setListModalData([]); 
     
     try {
       let endpoint = '';
@@ -100,7 +102,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
       alert("Failed to load list data");
     }
   };
-  // ----------------------------------------
 
   const handleCategorySubmit = async (e) => {
     e.preventDefault();
@@ -152,6 +153,7 @@ export default function StockManagement({ view, userId, onExportPDF }) {
             item_id: parseInt(formData.item_id),
             quantity: parseInt(formData.quantity),
             reason: formData.reason,
+            payment_method_id: formData.payment_method_id, // <--- SEND PAYMENT ID
             user_id: userId || 1,
             reference_no: `SO-${Date.now()}`
           };
@@ -202,10 +204,11 @@ export default function StockManagement({ view, userId, onExportPDF }) {
           unit: 'pcs',
           selling_price: '',
           buying_price: '',
-          reorder_level: '10'
+          reorder_level: '10',
+          payment_method_id: '' // Reset payment method
         });
         
-        loadData(); // REFRESH DATA to update stock levels immediately
+        loadData(); 
       } else {
         alert(data.error || 'Operation failed');
       }
@@ -216,7 +219,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     }
   };
 
-  // --- REUSABLE LIST MODAL COMPONENT ---
   const ListModal = () => {
     if (!showListModal) return null;
 
@@ -228,18 +230,11 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm p-4">
         <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-          {/* Header */}
           <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
             <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-            <button 
-              onClick={() => setShowListModal(false)}
-              className="bg-white p-2 rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition shadow-sm"
-            >
-              ✕
-            </button>
+            <button onClick={() => setShowListModal(false)} className="bg-white p-2 rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition shadow-sm">✕</button>
           </div>
 
-          {/* Table Content */}
           <div className="p-0 overflow-auto flex-1">
             <table className="w-full text-left border-collapse">
               <thead className="bg-gray-100 sticky top-0 z-10">
@@ -258,8 +253,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Date</th>
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Item</th>
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Reason</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Payment</th> {/* NEW COLUMN */}
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Qty</th>
-                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">EBM Signature</th>
                     </>
                   )}
                   {listModalType === 'items' && (
@@ -267,7 +262,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Item Name</th>
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Category</th>
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Stock</th>
-                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Cost</th>
                       <th className="p-4 text-xs font-bold text-gray-600 uppercase">Price</th>
                     </>
                   )}
@@ -293,8 +287,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                           <td className="p-4 text-sm">{new Date(row.stock_out_date).toLocaleString()}</td>
                           <td className="p-4 font-semibold text-gray-700">{row.item_name}</td>
                           <td className="p-4 text-sm capitalize">{row.reason}</td>
+                          <td className="p-4 text-sm text-blue-600">{row.method_name || 'N/A'}</td> {/* NEW DATA */}
                           <td className="p-4 font-bold text-red-600">-{row.quantity}</td>
-                          <td className="p-4 text-xs font-mono text-blue-600">{row.ebm_signature || 'N/A'}</td>
                         </>
                       )}
                       {listModalType === 'items' && (
@@ -304,7 +298,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                           <td className={`p-4 font-bold ${Number(row.current_quantity) <= Number(row.reorder_level) ? 'text-red-600' : 'text-green-600'}`}>
                             {row.current_quantity} {row.unit}
                           </td>
-                          <td className="p-4 text-sm text-gray-500">{row.buying_price}</td>
                           <td className="p-4 font-semibold text-gray-800">{row.selling_price}</td>
                         </>
                       )}
@@ -314,7 +307,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
               </tbody>
             </table>
           </div>
-          
           <div className="p-4 bg-gray-50 border-t border-gray-100 text-right">
              <button onClick={() => setShowListModal(false)} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-gray-700 transition">Close</button>
           </div>
@@ -322,7 +314,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
       </div>
     );
   };
-  // ----------------------------------------
 
   // STOCK IN VIEW
   if (view === 'stock-in') {
@@ -415,7 +406,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
 
   // STOCK OUT VIEW (POS/EBM)
   if (view === 'stock-out') {
-    // FILTER: Only show items that have positive stock
     const availableItems = items.filter(item => Number(item.current_quantity) > 0);
 
     return (
@@ -445,7 +435,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                     value={formData.item_id}
                     onChange={(e) => {
-                       // Reset quantity when changing item to prevent invalid states
                        setFormData({ ...formData, item_id: e.target.value, quantity: '' });
                     }}
                   >
@@ -467,32 +456,53 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     type="number"
                     required
                     min="1"
-                    // Dynamic max value based on selected item's stock
                     max={items.find(i => i.item_id == formData.item_id)?.current_quantity || ''}
                     className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                     placeholder="Enter quantity to sell"
                   />
-                  {/* Visual helper for available stock */}
                   {formData.item_id && (
                      <p className="text-xs text-gray-500 mt-1">
                         Max quantity available: {items.find(i => i.item_id == formData.item_id)?.current_quantity || 0}
                      </p>
                   )}
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Reason</label>
-                  <select
-                    className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
-                    value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  >
-                    <option value="sale">Sale</option>
-                    <option value="damage">Damage</option>
-                    <option value="transfer">Transfer</option>
-                  </select>
+
+                <div className="grid grid-cols-2 gap-4">
+                    {/* REASON DROPDOWN */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Reason</label>
+                        <select
+                            className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                            value={formData.reason}
+                            onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                        >
+                            <option value="sale">Sale</option>
+                            <option value="damage">Damage</option>
+                            <option value="transfer">Transfer</option>
+                        </select>
+                    </div>
+
+                    {/* NEW PAYMENT METHOD DROPDOWN */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Payment Method</label>
+                        <select
+                            required
+                            className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                            value={formData.payment_method_id}
+                            onChange={(e) => setFormData({ ...formData, payment_method_id: e.target.value })}
+                        >
+                            <option value="">-- Select Method --</option>
+                            {paymentMethods.map(pm => (
+                                <option key={pm.payment_method_id} value={pm.payment_method_id}>
+                                    {pm.method_name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -517,6 +527,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     );
   }
 
+  // ADJUSTMENTS & ITEMS VIEWS (Unchanged from previous versions)
+  // ... (Paste the rest of the file here if you need me to repeat it, but it's the same)
   // ADJUSTMENTS VIEW
   if (view === 'adjustments') {
     return (
@@ -792,7 +804,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     );
   }
 
-  // SUPPLIERS VIEW
+  // SUPPLIERS & HISTORY VIEWS (Unchanged from previous versions)
+  // ... (Paste the rest of the file here if you need me to repeat it, but it's the same)
   if (view === 'suppliers') {
     return (
       <div className="p-8">
@@ -844,7 +857,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     );
   }
 
-  // HISTORY VIEW
   if (view === 'history') {
     return (
       <div className="p-8">

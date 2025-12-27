@@ -173,13 +173,23 @@ if ($action === 'stock_in') {
     exit;
 }
 
+// --- UPDATED STOCK OUT TO INCLUDE PAYMENT METHOD ---
 if ($action === 'stock_out') {
     $pdo->beginTransaction();
     try {
         $ebm_sig = "EBM-RRA-" . strtoupper(bin2hex(random_bytes(4))) . "-" . date('Ymd');
         
-        $stmt = $pdo->prepare("INSERT INTO stock_out (item_id, quantity, ebm_signature, reason, issued_by, reference_no) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$data['item_id'], $data['quantity'], $ebm_sig, $data['reason'] ?? 'sale', $data['user_id'] ?? 1, $data['reference_no'] ?? null]);
+        // Added payment_method_id column
+        $stmt = $pdo->prepare("INSERT INTO stock_out (item_id, quantity, ebm_signature, reason, issued_by, reference_no, payment_method_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $data['item_id'], 
+            $data['quantity'], 
+            $ebm_sig, 
+            $data['reason'] ?? 'sale', 
+            $data['user_id'] ?? 1, 
+            $data['reference_no'] ?? null,
+            $data['payment_method_id'] ?? null // Capture Payment ID
+        ]);
         
         $update = $pdo->prepare("UPDATE inventory SET current_quantity = current_quantity - ? WHERE item_id = ? AND current_quantity >= ?");
         $update->execute([$data['quantity'], $data['item_id'], $data['quantity']]);
@@ -241,11 +251,17 @@ if ($action === 'dashboard_stats') {
 }
 
 // ============================================
-// CATEGORIES & SUPPLIERS
+// CATEGORIES & SUPPLIERS & PAYMENTS
 // ============================================
 
 if ($action === 'get_categories') {
     echo json_encode($pdo->query("SELECT * FROM categories ORDER BY category_name")->fetchAll());
+    exit;
+}
+
+// --- NEW ACTION: GET PAYMENT METHODS ---
+if ($action === 'get_payment_methods') {
+    echo json_encode($pdo->query("SELECT * FROM payment_methods")->fetchAll());
     exit;
 }
 
@@ -275,8 +291,17 @@ if ($action === 'stock_in_history') {
     exit;
 }
 
+// --- UPDATED HISTORY TO SHOW PAYMENT METHOD NAME ---
 if ($action === 'stock_out_history') {
-    echo json_encode($pdo->query("SELECT so.*, i.item_name, u.username as issued_by_name FROM stock_out so JOIN items i ON so.item_id = i.item_id LEFT JOIN users u ON so.issued_by = u.user_id ORDER BY so.stock_out_date DESC LIMIT 100")->fetchAll());
+    // Added LEFT JOIN payment_methods
+    echo json_encode($pdo->query("
+        SELECT so.*, i.item_name, u.username as issued_by_name, pm.method_name
+        FROM stock_out so 
+        JOIN items i ON so.item_id = i.item_id 
+        LEFT JOIN users u ON so.issued_by = u.user_id 
+        LEFT JOIN payment_methods pm ON so.payment_method_id = pm.payment_method_id
+        ORDER BY so.stock_out_date DESC LIMIT 100
+    ")->fetchAll());
     exit;
 }
 
