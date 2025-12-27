@@ -23,11 +23,18 @@ export const LoginForm = ({ onNext }) => {
       const data = await res.json();
 
       if (res.ok && data.status === 'otp_sent') {
-        // Store OTP for debugging (remove in production)
+        // 1. Show the success message (e.g., "OTP sent to your email...")
+        alert(data.message);
+
+        // 2. DEBUG MODE: Only show the code on screen if email failed or no email exists
         if (data.debug_otp) {
-          alert(`DEBUG: Your OTP is ${data.debug_otp}`);
+          alert(`⚠️ DEBUG MODE: Your Login Code is ${data.debug_otp}`);
         }
+
+        // 3. Save username for the verification step
         localStorage.setItem('pending_user', username);
+        
+        // 4. Move to the next screen (Enter OTP)
         onNext(username);
       } else {
         setError(data.error || 'Login failed. Please check your credentials.');
