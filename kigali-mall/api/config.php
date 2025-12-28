@@ -1,11 +1,11 @@
 <?php
-// Database Configuration for Kigali Mall System
-header("Content-Type: application/json");
+// // config.php
+// // Clean version - No extra headers, just connection
 
 $host = 'localhost';
 $db   = 'kigali_inventory';
 $user = 'root';
-$pass = '';
+$pass = ''; // Keep empty if using default XAMPP
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8", $user, $pass, [
@@ -14,8 +14,12 @@ try {
         PDO::ATTR_EMULATE_PREPARES => false
     ]);
 } catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(["error" => "Database connection failed: " . $e->getMessage()]);
+    // TRICK: We send 200 OK even on error, so the browser lets us see the message!
+    http_response_code(200); 
+    echo json_encode([
+        "status" => "error",
+        "message" => "DATABASE CONNECTION FAILED: " . $e->getMessage()
+    ]);
     exit;
 }
-?>
+// NO closing tag at the end

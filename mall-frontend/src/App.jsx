@@ -54,7 +54,7 @@ export default function App() {
         onVerify={handleLoginSuccess}
         onBack={() => setStep('login')}
       />
-    );
+    );z
   }
 
   // Main dashboard

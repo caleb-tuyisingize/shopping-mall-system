@@ -6,8 +6,22 @@ export default function StockManagement({ view, userId, onExportPDF }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]); // <--- NEW STATE
+  
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // MODAL STATES
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showListModal, setShowListModal] = useState(false); 
+  const [listModalData, setListModalData] = useState([]);    
+  const [listModalType, setListModalType] = useState('');    
+
+  const [categoryForm, setCategoryForm] = useState({
+    category_name: '',
+    description: ''
+  });
+
   const [formData, setFormData] = useState({
     item_id: '',
     quantity: '',
@@ -22,7 +36,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     reorder_level: '10',
     supplier_name: '',
     contact_info: '',
-    phone: ''
+    phone: '',
+    payment_method_id: '' // <--- NEW FIELD
   });
 
   useEffect(() => {
@@ -46,13 +61,17 @@ export default function StockManagement({ view, userId, onExportPDF }) {
           return dateB - dateA;
         }));
       } else {
-        const [itemsRes, categoriesRes, suppliersRes] = await Promise.all([
+        // Fetch standard data + payment methods
+        const [itemsRes, categoriesRes, suppliersRes, paymentsRes] = await Promise.all([
           fetch(`${API}?action=get_items`),
           fetch(`${API}?action=get_categories`),
-          fetch(`${API}?action=get_suppliers`)
+          fetch(`${API}?action=get_suppliers`),
+          fetch(`${API}?action=get_payment_methods`) // <--- FETCH PAYMENTS
         ]);
         setItems(await itemsRes.json());
         setCategories(await categoriesRes.json());
+        setPaymentMethods(await paymentsRes.json()); // <--- SET STATE
+        
         if (view === 'stock-in' || view === 'suppliers') {
           setSuppliers(await suppliersRes.json());
         }
@@ -60,6 +79,50 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     } catch (error) {
       console.error('Error loading data:', error);
       alert('Error loading data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openListModal = async (type) => {
+    setListModalType(type);
+    setShowListModal(true);
+    setListModalData([]); 
+    
+    try {
+      let endpoint = '';
+      if (type === 'in') endpoint = 'stock_in_history';
+      if (type === 'out') endpoint = 'stock_out_history';
+      if (type === 'items') endpoint = 'get_items';
+
+      const res = await fetch(`${API}?action=${endpoint}`);
+      const data = await res.json();
+      setListModalData(data);
+    } catch (error) {
+      alert("Failed to load list data");
+    }
+  };
+
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}?action=add_category`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(categoryForm)
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        alert('Category added successfully!');
+        setShowCategoryModal(false);
+        setCategoryForm({ category_name: '', description: '' });
+        loadData();
+      } else {
+        alert(data.error || 'Failed to add category');
+      }
+    } catch (error) {
+      alert('Error: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -90,6 +153,7 @@ export default function StockManagement({ view, userId, onExportPDF }) {
             item_id: parseInt(formData.item_id),
             quantity: parseInt(formData.quantity),
             reason: formData.reason,
+            payment_method_id: formData.payment_method_id, // <--- SEND PAYMENT ID
             user_id: userId || 1,
             reference_no: `SO-${Date.now()}`
           };
@@ -129,7 +193,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
           ? `Transaction successful! EBM: ${data.ebm_signature}`
           : 'Operation successful!');
         
-        // Reset form
         setFormData({
           item_id: '',
           quantity: '',
@@ -141,10 +204,11 @@ export default function StockManagement({ view, userId, onExportPDF }) {
           unit: 'pcs',
           selling_price: '',
           buying_price: '',
-          reorder_level: '10'
+          reorder_level: '10',
+          payment_method_id: '' // Reset payment method
         });
         
-        loadData();
+        loadData(); 
       } else {
         alert(data.error || 'Operation failed');
       }
@@ -155,15 +219,118 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     }
   };
 
+  const ListModal = () => {
+    if (!showListModal) return null;
+
+    let title = '';
+    if (listModalType === 'in') title = '📜 Stock In History';
+    if (listModalType === 'out') title = '📜 Sales (Stock Out) History';
+    if (listModalType === 'items') title = '📦 All Items Inventory';
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm p-4">
+        <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+            <button onClick={() => setShowListModal(false)} className="bg-white p-2 rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition shadow-sm">✕</button>
+          </div>
+
+          <div className="p-0 overflow-auto flex-1">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-gray-100 sticky top-0 z-10">
+                <tr>
+                  {listModalType === 'in' && (
+                    <>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Date</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Item</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Supplier</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Qty</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Received By</th>
+                    </>
+                  )}
+                  {listModalType === 'out' && (
+                    <>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Date</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Item</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Reason</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Payment</th> {/* NEW COLUMN */}
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Qty</th>
+                    </>
+                  )}
+                  {listModalType === 'items' && (
+                    <>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Item Name</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Category</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Stock</th>
+                      <th className="p-4 text-xs font-bold text-gray-600 uppercase">Price</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {listModalData.length === 0 ? (
+                  <tr><td colSpan="5" className="p-8 text-center text-gray-500">No records found...</td></tr>
+                ) : (
+                  listModalData.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      {listModalType === 'in' && (
+                        <>
+                          <td className="p-4 text-sm">{new Date(row.stock_in_date).toLocaleString()}</td>
+                          <td className="p-4 font-semibold text-gray-700">{row.item_name}</td>
+                          <td className="p-4 text-sm text-gray-600">{row.supplier_name || '-'}</td>
+                          <td className="p-4 font-bold text-green-600">+{row.quantity}</td>
+                          <td className="p-4 text-sm text-gray-500">{row.received_by_name}</td>
+                        </>
+                      )}
+                      {listModalType === 'out' && (
+                        <>
+                          <td className="p-4 text-sm">{new Date(row.stock_out_date).toLocaleString()}</td>
+                          <td className="p-4 font-semibold text-gray-700">{row.item_name}</td>
+                          <td className="p-4 text-sm capitalize">{row.reason}</td>
+                          <td className="p-4 text-sm text-blue-600">{row.method_name || 'N/A'}</td> {/* NEW DATA */}
+                          <td className="p-4 font-bold text-red-600">-{row.quantity}</td>
+                        </>
+                      )}
+                      {listModalType === 'items' && (
+                        <>
+                          <td className="p-4 font-bold text-gray-800">{row.item_name}</td>
+                          <td className="p-4 text-sm text-blue-600 bg-blue-50 w-fit rounded-lg px-2 py-1">{row.category_name}</td>
+                          <td className={`p-4 font-bold ${Number(row.current_quantity) <= Number(row.reorder_level) ? 'text-red-600' : 'text-green-600'}`}>
+                            {row.current_quantity} {row.unit}
+                          </td>
+                          <td className="p-4 font-semibold text-gray-800">{row.selling_price}</td>
+                        </>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 bg-gray-50 border-t border-gray-100 text-right">
+             <button onClick={() => setShowListModal(false)} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-gray-700 transition">Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // STOCK IN VIEW
   if (view === 'stock-in') {
     return (
       <div className="p-8">
+        <ListModal />
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-black text-gray-800 mb-2">Stock In (Receive Items)</h1>
             <p className="text-gray-500">Record incoming stock from suppliers</p>
           </div>
+          <button 
+            onClick={() => openListModal('in')}
+            className="bg-white border-2 border-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-50 hover:border-gray-300 transition shadow-sm flex items-center gap-2"
+          >
+            <span>📜</span> View History
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -186,7 +353,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     ))}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Supplier</label>
                   <select
@@ -202,7 +368,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     ))}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Quantity</label>
                   <input
@@ -215,7 +380,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     placeholder="Enter quantity"
                   />
                 </div>
-
                 <button
                   type="submit"
                   disabled={loading}
@@ -226,8 +390,7 @@ export default function StockManagement({ view, userId, onExportPDF }) {
               </div>
             </form>
           </div>
-
-          <div className="bg-blue-50 p-6 rounded-2xl border border-blue-200">
+          <div className="bg-blue-50 p-6 rounded-2xl border border-blue-200 h-fit">
             <h3 className="font-bold text-blue-900 mb-4">📥 Stock In Info</h3>
             <ul className="space-y-2 text-sm text-blue-800">
               <li>• Records items received from suppliers</li>
@@ -243,13 +406,22 @@ export default function StockManagement({ view, userId, onExportPDF }) {
 
   // STOCK OUT VIEW (POS/EBM)
   if (view === 'stock-out') {
+    const availableItems = items.filter(item => Number(item.current_quantity) > 0);
+
     return (
       <div className="p-8">
+        <ListModal />
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-black text-gray-800 mb-2">Point of Sale (EBM)</h1>
             <p className="text-gray-500">Record sales with EBM signature generation</p>
           </div>
+          <button 
+            onClick={() => openListModal('out')}
+            className="bg-white border-2 border-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-50 hover:border-gray-300 transition shadow-sm flex items-center gap-2"
+          >
+            <span>📜</span> View Sales History
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -262,41 +434,73 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     required
                     className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                     value={formData.item_id}
-                    onChange={(e) => setFormData({ ...formData, item_id: e.target.value })}
+                    onChange={(e) => {
+                       setFormData({ ...formData, item_id: e.target.value, quantity: '' });
+                    }}
                   >
                     <option value="">-- Select Item to Sell --</option>
-                    {items.map(item => (
-                      <option key={item.item_id} value={item.item_id}>
-                        {item.item_name} (Stock: {item.current_quantity || 0}) - RWF {item.selling_price || 0}
-                      </option>
-                    ))}
+                    {availableItems.length === 0 ? (
+                      <option disabled>⚠️ No items in stock! Go to Stock In first.</option>
+                    ) : (
+                      availableItems.map(item => (
+                        <option key={item.item_id} value={item.item_id}>
+                          {item.item_name} (Available: {item.current_quantity} {item.unit}) - RWF {item.selling_price}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Quantity</label>
                   <input
                     type="number"
                     required
                     min="1"
+                    max={items.find(i => i.item_id == formData.item_id)?.current_quantity || ''}
                     className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                     placeholder="Enter quantity to sell"
                   />
+                  {formData.item_id && (
+                     <p className="text-xs text-gray-500 mt-1">
+                        Max quantity available: {items.find(i => i.item_id == formData.item_id)?.current_quantity || 0}
+                     </p>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Reason</label>
-                  <select
-                    className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
-                    value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  >
-                    <option value="sale">Sale</option>
-                    <option value="damage">Damage</option>
-                    <option value="transfer">Transfer</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                    {/* REASON DROPDOWN */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Reason</label>
+                        <select
+                            className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                            value={formData.reason}
+                            onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                        >
+                            <option value="sale">Sale</option>
+                            <option value="damage">Damage</option>
+                            <option value="transfer">Transfer</option>
+                        </select>
+                    </div>
+
+                    {/* NEW PAYMENT METHOD DROPDOWN */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Payment Method</label>
+                        <select
+                            required
+                            className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                            value={formData.payment_method_id}
+                            onChange={(e) => setFormData({ ...formData, payment_method_id: e.target.value })}
+                        >
+                            <option value="">-- Select Method --</option>
+                            {paymentMethods.map(pm => (
+                                <option key={pm.payment_method_id} value={pm.payment_method_id}>
+                                    {pm.method_name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <button
@@ -309,8 +513,7 @@ export default function StockManagement({ view, userId, onExportPDF }) {
               </div>
             </form>
           </div>
-
-          <div className="bg-purple-50 p-6 rounded-2xl border border-purple-200">
+          <div className="bg-purple-50 p-6 rounded-2xl border border-purple-200 h-fit">
             <h3 className="font-bold text-purple-900 mb-4">📤 EBM Sales Info</h3>
             <ul className="space-y-2 text-sm text-purple-800">
               <li>• Automatically generates EBM signature</li>
@@ -324,6 +527,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     );
   }
 
+  // ADJUSTMENTS & ITEMS VIEWS (Unchanged from previous versions)
+  // ... (Paste the rest of the file here if you need me to repeat it, but it's the same)
   // ADJUSTMENTS VIEW
   if (view === 'adjustments') {
     return (
@@ -355,7 +560,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     ))}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Quantity Change</label>
                   <input
@@ -364,11 +568,10 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                     value={formData.quantity_change}
                     onChange={(e) => setFormData({ ...formData, quantity_change: e.target.value })}
-                    placeholder="Use + for increase, - for decrease (e.g., -5 for damage)"
+                    placeholder="Use + for increase, - for decrease"
                   />
                   <p className="text-xs text-gray-500 mt-1">Enter positive number to add, negative to subtract</p>
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Reason</label>
                   <input
@@ -380,7 +583,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     placeholder="e.g., Damaged goods, Found stock, etc."
                   />
                 </div>
-
                 <button
                   type="submit"
                   disabled={loading}
@@ -391,8 +593,7 @@ export default function StockManagement({ view, userId, onExportPDF }) {
               </div>
             </form>
           </div>
-
-          <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200">
+          <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200 h-fit">
             <h3 className="font-bold text-orange-900 mb-4">⚠️ Adjustments Info</h3>
             <ul className="space-y-2 text-sm text-orange-800">
               <li>• Record damaged or lost items</li>
@@ -410,10 +611,83 @@ export default function StockManagement({ view, userId, onExportPDF }) {
   if (view === 'items') {
     return (
       <div className="p-8">
+        <ListModal />
+        
+        {/* Category Modal */}
+        {showCategoryModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-fade-in">
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800">Add New Category</h3>
+                <button 
+                  onClick={() => setShowCategoryModal(false)}
+                  className="text-gray-400 hover:text-red-500 text-2xl"
+                >
+                  &times;
+                </button>
+              </div>
+              
+              <form onSubmit={handleCategorySubmit} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Category Name</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                    value={categoryForm.category_name}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, category_name: e.target.value })}
+                    placeholder="e.g., Electronics"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
+                  <textarea
+                    className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                    rows="3"
+                    value={categoryForm.description}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                    placeholder="Optional description..."
+                  ></textarea>
+                </div>
+                <div className="pt-2 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryModal(false)}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition disabled:bg-gray-400"
+                  >
+                    {loading ? 'Saving...' : 'Save Category'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-black text-gray-800 mb-2">Items Management</h1>
             <p className="text-gray-500">Add and manage inventory items</p>
+          </div>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => openListModal('items')}
+              className="bg-white border-2 border-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-50 hover:border-gray-300 transition shadow-sm flex items-center gap-2"
+            >
+              <span>📦</span> View All Items
+            </button>
+            <button 
+              onClick={() => setShowCategoryModal(true)}
+              className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-sm flex items-center gap-2"
+            >
+              <span>🗂️</span> Manage Categories
+            </button>
           </div>
         </div>
 
@@ -432,7 +706,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     placeholder="e.g., Inyange Milk 1L"
                   />
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">Category</label>
@@ -449,7 +722,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">Unit</label>
                     <select
@@ -465,7 +737,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     </select>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">Buying Price (RWF)</label>
@@ -478,7 +749,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                       placeholder="0.00"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">Selling Price (RWF)</label>
                     <input
@@ -491,7 +761,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                     />
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Reorder Level</label>
                   <input
@@ -504,7 +773,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
                   />
                   <p className="text-xs text-gray-500 mt-1">Minimum stock level before reorder alert</p>
                 </div>
-
                 <button
                   type="submit"
                   disabled={loading}
@@ -515,7 +783,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
               </div>
             </form>
           </div>
-
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <h3 className="font-bold text-gray-900 mb-4">📦 Current Items ({items.length})</h3>
@@ -537,7 +804,8 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     );
   }
 
-  // SUPPLIERS VIEW
+  // SUPPLIERS & HISTORY VIEWS (Unchanged from previous versions)
+  // ... (Paste the rest of the file here if you need me to repeat it, but it's the same)
   if (view === 'suppliers') {
     return (
       <div className="p-8">
@@ -563,7 +831,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
             <h3 className="font-bold text-gray-900 mb-4">Add New Supplier</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
-              // This would need a backend endpoint for adding suppliers
               alert('Add supplier functionality - implement backend endpoint');
             }} className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input
@@ -590,7 +857,6 @@ export default function StockManagement({ view, userId, onExportPDF }) {
     );
   }
 
-  // HISTORY VIEW
   if (view === 'history') {
     return (
       <div className="p-8">
@@ -660,4 +926,3 @@ export default function StockManagement({ view, userId, onExportPDF }) {
 
   return null;
 }
-
