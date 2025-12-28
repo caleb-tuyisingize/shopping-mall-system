@@ -22,4 +22,4 @@ try {
     ]);
     exit;
 }
-// NO closing tag at the end
+?>
