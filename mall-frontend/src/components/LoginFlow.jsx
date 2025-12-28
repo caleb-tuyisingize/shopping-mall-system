@@ -47,7 +47,7 @@ export const LoginForm = ({ onNext }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-linear-to-br  from-slate-900 via-blue-900 to-slate-900 px-4">
+    <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-slate-900 via-blue-900 to-slate-900 px-4">
       <form onSubmit={handleSubmit} className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-blue-600">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-slate-800 mb-2">KIGALI MALL</h1>
