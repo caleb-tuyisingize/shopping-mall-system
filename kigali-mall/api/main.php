@@ -29,14 +29,14 @@ $action = $_GET['action'] ?? '';
 $data = json_decode(file_get_contents("php://input"), true) ?? [];
 
 // ============================================
-// AUTHENTICATION (EMAIL OTP)
+// AUTHENTICATION (EMAIL OTP & PASSWORD)
 // ============================================
 
 if ($action === 'login') {
     $username = $data['username'] ?? '';
     $password = $data['password'] ?? '';
     
-    // 1. Fetch user AND EMAIL
+    // Fetch user details including EMAIL
     $stmt = $pdo->prepare("SELECT user_id, password, role, full_name, email FROM users WHERE username = ?");
     $stmt->execute([$username]);
     $user = $stmt->fetch();
@@ -50,7 +50,7 @@ if ($action === 'login') {
         $update = $pdo->prepare("UPDATE users SET otp_code = ?, otp_expiry = ? WHERE user_id = ?");
         $update->execute([$otp, $expiry, $user['user_id']]);
         
-        // 2. SEND EMAIL IF EXISTS
+        // Send Email if address exists
         if (!empty($user['email'])) {
             $subject = "Kigali Mall Login Code";
             $body = "<h3>Login Verification</h3><p>Your OTP code is: <b style='font-size: 24px; color: blue;'>$otp</b></p><p>Valid for 5 minutes.</p>";
@@ -63,7 +63,7 @@ if ($action === 'login') {
                     "message" => "OTP sent to your email: " . $user['email']
                 ]);
             } else {
-                // Email failed? Show OTP on screen so you can still work
+                // Email failed fallback
                 echo json_encode([
                     "status" => "otp_sent",
                     "debug_otp" => $otp,
@@ -71,7 +71,7 @@ if ($action === 'login') {
                 ]);
             }
         } else {
-            // No email found? Show OTP on screen
+            // No email fallback
             echo json_encode([
                 "status" => "otp_sent",
                 "debug_otp" => $otp, 
@@ -96,7 +96,7 @@ if ($action === 'verify_otp') {
     if ($user && strtotime($user['otp_expiry']) > time()) {
         $token = bin2hex(random_bytes(32));
         
-        // Clear OTP after use
+        // Clear OTP
         $pdo->prepare("UPDATE users SET otp_code = NULL, otp_expiry = NULL, last_activity = NOW() WHERE user_id = ?")
             ->execute([$user['user_id']]);
         
@@ -113,6 +113,35 @@ if ($action === 'verify_otp') {
     } else {
         http_response_code(401);
         echo json_encode(["error" => "Invalid or expired OTP"]);
+    }
+    exit;
+}
+
+// --- NEW: CHANGE PASSWORD ACTION ---
+if ($action === 'change_password') {
+    $user_id = $data['user_id'] ?? '';
+    $current_password = $data['current_password'] ?? '';
+    $new_password = $data['new_password'] ?? '';
+
+    if (empty($user_id) || empty($current_password) || empty($new_password)) {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "error" => "All fields are required"]);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("SELECT password FROM users WHERE user_id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch();
+
+    if ($user && password_verify($current_password, $user['password'])) {
+        $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+        $update = $pdo->prepare("UPDATE users SET password = ? WHERE user_id = ?");
+        $update->execute([$new_hash, $user_id]);
+        
+        echo json_encode(["status" => "success", "message" => "Password changed successfully"]);
+    } else {
+        http_response_code(401);
+        echo json_encode(["status" => "error", "error" => "Current password is incorrect"]);
     }
     exit;
 }
@@ -173,13 +202,12 @@ if ($action === 'stock_in') {
     exit;
 }
 
-// --- UPDATED STOCK OUT TO INCLUDE PAYMENT METHOD ---
 if ($action === 'stock_out') {
     $pdo->beginTransaction();
     try {
         $ebm_sig = "EBM-RRA-" . strtoupper(bin2hex(random_bytes(4))) . "-" . date('Ymd');
         
-        // Added payment_method_id column
+        // Includes PAYMENT_METHOD_ID
         $stmt = $pdo->prepare("INSERT INTO stock_out (item_id, quantity, ebm_signature, reason, issued_by, reference_no, payment_method_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $data['item_id'], 
@@ -188,7 +216,7 @@ if ($action === 'stock_out') {
             $data['reason'] ?? 'sale', 
             $data['user_id'] ?? 1, 
             $data['reference_no'] ?? null,
-            $data['payment_method_id'] ?? null // Capture Payment ID
+            $data['payment_method_id'] ?? null
         ]);
         
         $update = $pdo->prepare("UPDATE inventory SET current_quantity = current_quantity - ? WHERE item_id = ? AND current_quantity >= ?");
@@ -251,17 +279,11 @@ if ($action === 'dashboard_stats') {
 }
 
 // ============================================
-// CATEGORIES & SUPPLIERS & PAYMENTS
+// CATEGORIES, SUPPLIERS & PAYMENTS
 // ============================================
 
 if ($action === 'get_categories') {
     echo json_encode($pdo->query("SELECT * FROM categories ORDER BY category_name")->fetchAll());
-    exit;
-}
-
-// --- NEW ACTION: GET PAYMENT METHODS ---
-if ($action === 'get_payment_methods') {
-    echo json_encode($pdo->query("SELECT * FROM payment_methods")->fetchAll());
     exit;
 }
 
@@ -282,6 +304,12 @@ if ($action === 'get_suppliers') {
     exit;
 }
 
+// --- NEW: GET PAYMENT METHODS ---
+if ($action === 'get_payment_methods') {
+    echo json_encode($pdo->query("SELECT * FROM payment_methods")->fetchAll());
+    exit;
+}
+
 // ============================================
 // HISTORY
 // ============================================
@@ -291,9 +319,8 @@ if ($action === 'stock_in_history') {
     exit;
 }
 
-// --- UPDATED HISTORY TO SHOW PAYMENT METHOD NAME ---
 if ($action === 'stock_out_history') {
-    // Added LEFT JOIN payment_methods
+    // UPDATED: Joins payment_methods
     echo json_encode($pdo->query("
         SELECT so.*, i.item_name, u.username as issued_by_name, pm.method_name
         FROM stock_out so 
