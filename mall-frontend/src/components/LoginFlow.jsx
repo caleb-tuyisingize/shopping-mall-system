@@ -99,10 +99,6 @@ export const LoginForm = ({ onNext }) => {
             {loading ? 'Verifying...' : 'Continue to OTP →'}
           </button>
         </div>
-
-        <p className="mt-6 text-center text-xs text-gray-400">
-          Default: admin / admin123
-        </p>
       </form>
     </div>
   );
